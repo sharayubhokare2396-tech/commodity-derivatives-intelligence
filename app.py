@@ -146,6 +146,69 @@ gold["Normalized ₹/g (999)"] = (
 )
 
 gold = gold.sort_values(["Date", "Expiry Date", "Symbol"])
+# Historical analysis: aggregate repeated rows without deleting data
+daily_prices = (
+    gold.groupby(["Date", "Symbol", "Expiry Date"], as_index=False)
+    ["Normalized ₹/g (999)"]
+    .median()
+    .sort_values(["Symbol", "Expiry Date", "Date"])
+)
+
+# Rolling Z-score within each contract expiry
+grouped_prices = daily_prices.groupby(["Symbol", "Expiry Date"])[
+    "Normalized ₹/g (999)"
+]
+
+daily_prices["Rolling Mean"] = grouped_prices.transform(
+    lambda s: s.rolling(window=5, min_periods=5).mean()
+)
+
+daily_prices["Rolling Std"] = grouped_prices.transform(
+    lambda s: s.rolling(window=5, min_periods=5).std(ddof=0)
+)
+
+daily_prices["Z-score"] = (
+    (daily_prices["Normalized ₹/g (999)"] - daily_prices["Rolling Mean"])
+    / daily_prices["Rolling Std"].replace(0, float("nan"))
+)
+
+st.subheader("Historical Price Trends")
+
+trend_fig = px.line(
+    daily_prices,
+    x="Date",
+    y="Normalized ₹/g (999)",
+    color="Symbol",
+    facet_col="Symbol",
+    facet_col_wrap=2,
+    hover_data=["Expiry Date"],
+    title="Normalized Gold Prices Over Time"
+)
+st.plotly_chart(trend_fig, use_container_width=True)
+
+st.subheader("Rolling Z-score Analysis")
+st.caption(
+    "Uses the previous five observations within each contract expiry. "
+    "Z-scores are exploratory indicators, not validated trading signals."
+)
+
+zscore_fig = px.line(
+    daily_prices,
+    x="Date",
+    y="Z-score",
+    color="Symbol",
+    facet_col="Symbol",
+    facet_col_wrap=2,
+    hover_data=["Expiry Date"],
+    title="Five-Observation Rolling Z-score"
+)
+st.plotly_chart(zscore_fig, use_container_width=True)
+
+st.dataframe(
+    daily_prices,
+    use_container_width=True,
+    hide_index=True
+)
 
 c1, c2, c3 = st.columns(3)
 c1.metric("Gold records", f"{len(gold):,}")

@@ -51,7 +51,7 @@ if uploaded_file is None:
 
 try:
     if uploaded_file.name.lower().endswith(".csv"):
-        raw = pd.read_csv(uploaded_file)
+        raw = pd.read_csv(uploaded_file,skiprows=4)
     else:
         raw = pd.read_excel(uploaded_file)
 

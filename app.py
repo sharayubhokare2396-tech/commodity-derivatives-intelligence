@@ -112,42 +112,25 @@ if "Open Interest(Lots)" in gold.columns:
     )
 if "Instrument Name" in raw.columns:
     st.write("Instrument types:", raw["Instrument Name"].value_counts())
-    
-   duplicate_keys = ["Date", "Symbol", "Expiry Date"]
+    duplicate_keys = ["Date", "Symbol", "Expiry Date"]
 
 duplicate_count = gold.duplicated(
-    subset=duplicate_keys,
-    keep=False
+    subset=duplicate_keys
 ).sum()
 
-if duplicate_count:
-    st.warning(
-        f"{duplicate_count} rows belong to repeated "
-        "date-contract-expiry groups. Review before backtesting."
-    )
-
-    duplicate_rows = gold[
-        gold.duplicated(subset=duplicate_keys, keep=False)
-    ].sort_values(duplicate_keys)
-
-    st.dataframe(duplicate_rows, use_container_width=True)
-    
-if duplicate_count:
-    st.subheader("Duplicate Row Investigation")
-    dup_rows = gold[
-        gold.duplicated(
-            subset=["Date", "Symbol", "Expiry Date"],
-            keep=False
-        )
-    ].sort_values(["Date", "Symbol", "Expiry Date"])
-
-    st.dataframe(dup_rows, use_container_width=True)
-if duplicate_count:
+if duplicate_count > 0:
     st.warning(
         f"Found {duplicate_count} duplicate date-contract-expiry rows. "
         "Review duplicates before using this data for backtesting."
     )
 
+    dup_rows = gold[
+        gold.duplicated(subset=duplicate_keys, keep=False)
+    ].sort_values(duplicate_keys)
+
+    st.subheader("Duplicate Row Investigation")
+    st.dataframe(dup_rows, use_container_width=True)
+   
 # Calculate equivalent price per gram at 999 purity.
 # Close is quoted per the contract's quoted_grams basis.
 gold["Quoted grams"] = gold["Symbol"].map(

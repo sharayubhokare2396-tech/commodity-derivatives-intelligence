@@ -110,11 +110,28 @@ if "Open Interest(Lots)" in gold.columns:
     gold["Open Interest(Lots)"] = pd.to_numeric(
         gold["Open Interest(Lots)"], errors="coerce"
     )
+if "Instrument Name" in raw.columns:
+    st.write("Instrument types:", raw["Instrument Name"].value_counts())
+    
+   duplicate_keys = ["Date", "Symbol", "Expiry Date"]
 
 duplicate_count = gold.duplicated(
-    subset=["Date", "Symbol", "Expiry Date"]
+    subset=duplicate_keys,
+    keep=False
 ).sum()
 
+if duplicate_count:
+    st.warning(
+        f"{duplicate_count} rows belong to repeated "
+        "date-contract-expiry groups. Review before backtesting."
+    )
+
+    duplicate_rows = gold[
+        gold.duplicated(subset=duplicate_keys, keep=False)
+    ].sort_values(duplicate_keys)
+
+    st.dataframe(duplicate_rows, use_container_width=True)
+    
 if duplicate_count:
     st.subheader("Duplicate Row Investigation")
     dup_rows = gold[

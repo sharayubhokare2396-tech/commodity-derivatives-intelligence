@@ -111,9 +111,16 @@ if "Open Interest(Lots)" in gold.columns:
         gold["Open Interest(Lots)"], errors="coerce"
     )
 
-duplicate_count = gold.duplicated(
-    subset=["Date", "Symbol", "Expiry Date"]
-).sum()
+if duplicate_count:
+    st.subheader("Duplicate Row Investigation")
+    dup_rows = gold[
+        gold.duplicated(
+            subset=["Date", "Symbol", "Expiry Date"],
+            keep=False
+        )
+    ].sort_values(["Date", "Symbol", "Expiry Date"])
+
+    st.dataframe(dup_rows, use_container_width=True)
 
 if duplicate_count:
     st.warning(

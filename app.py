@@ -154,17 +154,31 @@ daily_prices = (
     .sort_values(["Symbol", "Expiry Date", "Date"])
 )
 
-# Rolling Z-score within each contract expiry
+# Rolling Z-score using only previous 5 observations
 grouped_prices = daily_prices.groupby(["Symbol", "Expiry Date"])[
     "Normalized ₹/g (999)"
 ]
 
-daily_prices["Rolling Mean"] = grouped_prices.transform(
-    lambda s: s.rolling(window=5, min_periods=5).mean()
+# Shift(1) excludes the current day's price
+previous_prices = grouped_prices.shift(1)
+
+daily_prices["Rolling Mean"] = (
+    previous_prices.groupby(
+        [daily_prices["Symbol"], daily_prices["Expiry Date"]]
+    )
+    .transform(lambda s: s.rolling(window=5, min_periods=5).mean())
 )
 
-daily_prices["Rolling Std"] = grouped_prices.transform(
-    lambda s: s.rolling(window=5, min_periods=5).std(ddof=0)
+daily_prices["Rolling Std"] = (
+    previous_prices.groupby(
+        [daily_prices["Symbol"], daily_prices["Expiry Date"]]
+    )
+    .transform(lambda s: s.rolling(window=5, min_periods=5).std(ddof=0))
+)
+
+daily_prices["Z-score"] = (
+    (daily_prices["Normalized ₹/g (999)"] - daily_prices["Rolling Mean"])
+    / daily_prices["Rolling Std"].replace(0, float("nan"))
 )
 
 daily_prices["Z-score"] = (

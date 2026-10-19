@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 st.set_page_config(
     page_title="Commodity Derivatives Intelligence",
@@ -7,114 +8,206 @@ st.set_page_config(
     layout="wide"
 )
 
-# Header
 st.title("📈 Commodity Derivatives Intelligence")
-st.markdown(
-    "### MCX Gold Market Analysis Dashboard"
-)
+st.subheader("MCX Gold Relative Pricing Dashboard")
 st.caption(
-    "Gold contract normalization | Relative pricing | Backtesting"
+    "Hackpeak | Contract normalization, data validation "
+    "and expiry-wise analysis"
 )
 
-st.divider()
-
-# Project overview
-st.subheader("Project Overview")
-st.write(
-    "This project aims to compare MCX gold futures contracts "
-    "on a common basis to identify potential relative mispricing."
+st.info(
+    "Upload an MCX Bhavcopy CSV or Excel file. "
+    "This prototype calculates normalized gold prices; "
+    "historical strategy performance is not yet validated."
 )
 
-col1, col2, col3 = st.columns(3)
+CONTRACTS = {
+    "GOLDM": {"quoted_grams": 10, "purity": 995},
+    "GOLDTEN": {"quoted_grams": 10, "purity": 999},
+    "GOLDGUINEA": {"quoted_grams": 8, "purity": 999},
+    "GOLDPETAL": {"quoted_grams": 1, "purity": 999},
+}
 
-with col1:
-    st.info("**GOLDM**\n\nGold Mini contract")
+REQUIRED_COLUMNS = [
+    "Date", "Symbol", "Expiry Date", "Close"
+]
 
-with col2:
-    st.info("**GOLDTEN**\n\nGold Ten contract")
-
-with col3:
-    st.info("**GOLDGUINEA / GOLDPETAL**\n\nOther gold contracts")
-
-st.divider()
-
-# Validation metrics
-st.subheader("Validation Status")
-
-col1, col2, col3 = st.columns(3)
-
-col1.metric("Net PnL after costs", "Not validated")
-col2.metric("Unseen-data hit rate", "Not measured")
-col3.metric("Gold price contribution", "Not evaluated")
-
-st.warning(
-    "Historical MCX data and backtest results have not yet "
-    "been validated. No performance figures are claimed."
-)
-
-st.divider()
-
-# Upload market data
-st.subheader("Upload MCX Bhavcopy")
-st.write(
-    "Upload a historical MCX CSV or Excel file to inspect "
-    "its columns and data before analysis."
-)
-
-uploaded_file = st.file_uploader(
-    "Choose a market data file",
+st.sidebar.header("Data")
+uploaded_file = st.sidebar.file_uploader(
+    "Upload MCX Bhavcopy",
     type=["csv", "xlsx", "xls"]
 )
 
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.lower().endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
+if uploaded_file is None:
+    st.subheader("Project Overview")
+    st.write(
+        "Compare MCX gold futures contracts using a common "
+        "₹/gram basis adjusted to 999 purity."
+    )
+    st.write("Supported contracts: GOLDM, GOLDTEN, "
+             "GOLDGUINEA and GOLDPETAL.")
+    st.warning("Upload a Bhavcopy file to begin analysis.")
+    st.stop()
 
-        st.success("File loaded for preview.")
-        st.write("Rows:", len(df))
-        st.write("Columns:", len(df.columns))
-        st.dataframe(df.head(20), use_container_width=True)
+try:
+    if uploaded_file.name.lower().endswith(".csv"):
+        raw = pd.read_csv(uploaded_file)
+    else:
+        raw = pd.read_excel(uploaded_file)
 
-        st.download_button(
-            "Download uploaded data preview",
-            data=df.head(1000).to_csv(index=False).encode("utf-8"),
-            file_name="mcx_data_preview.csv",
-            mime="text/csv"
-        )
+except Exception as exc:
+    st.error(f"Could not read file: {exc}")
+    st.stop()
 
-    except Exception as error:
-        st.error(f"Could not read the file: {error}")
+# Clean column names and padded symbol values
+raw.columns = raw.columns.astype(str).str.strip()
 
-st.divider()
+st.subheader("1. File Validation")
+st.metric("Uploaded rows", f"{len(raw):,}")
 
-# Methodology
-st.subheader("Proposed Analysis Workflow")
+missing = [c for c in REQUIRED_COLUMNS if c not in raw.columns]
 
+if missing:
+    st.error("Required columns missing: " + ", ".join(missing))
+    st.write("Columns found:", raw.columns.tolist())
+    st.stop()
+
+df = raw.copy()
+df["Symbol"] = df["Symbol"].astype(str).str.strip().str.upper()
+df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True)
+
+# MCX expiry format commonly looks like 04SEP2026
+df["Expiry Date"] = pd.to_datetime(
+    df["Expiry Date"].astype(str).str.strip(),
+    format="%d%b%Y",
+    errors="coerce"
+)
+
+if "Instrument Name" in df.columns:
+    df = df[df["Instrument Name"].astype(str).str.strip().str.upper() == "FUTCOM"]
+
+gold = df[df["Symbol"].isin(CONTRACTS)].copy()
+
+if gold.empty:
+    st.warning(
+        "No supported gold futures contracts found. "
+        "Check the symbol names and instrument type in your file."
+    )
+    st.write("Symbols found:", sorted(df["Symbol"].dropna().unique())[:50])
+    st.stop()
+
+gold["Close"] = pd.to_numeric(gold["Close"], errors="coerce")
+gold = gold.dropna(subset=["Date", "Expiry Date", "Close"])
+gold = gold[gold["Close"] > 0].copy()
+
+if "Volume(Lots)" in gold.columns:
+    gold["Volume(Lots)"] = pd.to_numeric(
+        gold["Volume(Lots)"], errors="coerce"
+    )
+
+if "Open Interest(Lots)" in gold.columns:
+    gold["Open Interest(Lots)"] = pd.to_numeric(
+        gold["Open Interest(Lots)"], errors="coerce"
+    )
+
+duplicate_count = gold.duplicated(
+    subset=["Date", "Symbol", "Expiry Date"]
+).sum()
+
+if duplicate_count:
+    st.warning(
+        f"Found {duplicate_count} duplicate date-contract-expiry rows. "
+        "Review duplicates before using this data for backtesting."
+    )
+
+# Calculate equivalent price per gram at 999 purity.
+# Close is quoted per the contract's quoted_grams basis.
+gold["Quoted grams"] = gold["Symbol"].map(
+    {k: v["quoted_grams"] for k, v in CONTRACTS.items()}
+)
+gold["Purity"] = gold["Symbol"].map(
+    {k: v["purity"] for k, v in CONTRACTS.items()}
+)
+
+gold["Normalized ₹/g (999)"] = (
+    gold["Close"] / gold["Quoted grams"]
+    * 999 / gold["Purity"]
+)
+
+gold = gold.sort_values(["Date", "Expiry Date", "Symbol"])
+
+c1, c2, c3 = st.columns(3)
+c1.metric("Gold records", f"{len(gold):,}")
+c2.metric("Contracts found", gold["Symbol"].nunique())
+c3.metric("Trading dates", gold["Date"].nunique())
+
+st.success("File loaded and supported gold rows processed.")
+
+st.subheader("2. Normalized Gold Contract Prices")
+st.caption(
+    "Prices are expressed as equivalent ₹/gram at 999 purity. "
+    "Expiry dates remain separate; this is not a trading signal."
+)
+
+display_cols = [
+    "Date", "Symbol", "Expiry Date", "Close",
+    "Quoted grams", "Purity", "Normalized ₹/g (999)"
+]
+
+for optional_col in ["Volume(Lots)", "Open Interest(Lots)"]:
+    if optional_col in gold.columns:
+        display_cols.append(optional_col)
+
+st.dataframe(
+    gold[display_cols],
+    use_container_width=True,
+    hide_index=True
+)
+
+st.subheader("3. Price Comparison")
+plot_data = gold.copy()
+plot_data["Expiry Label"] = plot_data["Expiry Date"].dt.strftime("%d %b %Y")
+
+fig = px.scatter(
+    plot_data,
+    x="Expiry Date",
+    y="Normalized ₹/g (999)",
+    color="Symbol",
+    hover_data=["Date", "Close", "Purity"],
+    title="Normalized Gold Prices by Contract Expiry"
+)
+st.plotly_chart(fig, use_container_width=True)
+
+st.subheader("4. Data Quality Summary")
+q1, q2, q3 = st.columns(3)
+q1.metric("Missing dates in uploaded file", int(raw["Date"].isna().sum()))
+q2.metric("Invalid/zero gold prices removed",
+          int((pd.to_numeric(
+              df.loc[df["Symbol"].isin(CONTRACTS), "Close"],
+              errors="coerce"
+          ) <= 0).sum()))
+q3.metric("Duplicate gold rows", int(duplicate_count))
+
+st.subheader("5. Download Processed Gold Data")
+csv_data = gold[display_cols].to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    "Download normalized gold CSV",
+    data=csv_data,
+    file_name="normalized_gold_contracts.csv",
+    mime="text/csv"
+)
+
+st.subheader("Current Limitations")
 st.markdown("""
-1. **Data Collection:** Obtain historical MCX Bhavcopy data.
-2. **Data Validation:** Check dates, contracts, prices and units.
-3. **Normalization:** Convert contracts to a comparable basis
-   using verified contract specifications.
-4. **Relative Pricing:** Compare normalized contract prices.
-5. **Walk-forward Backtesting:** Test signals on unseen periods
-   while accounting for costs and liquidity.
-6. **Performance Evaluation:** Report PnL and other metrics only
-   after testing and verification.
+- Normalized prices are an analytical comparison, not proof of mispricing.
+- Contracts with different expiry dates may have different carry and expiry effects.
+- A single trading day cannot validate a historical strategy.
+- Backtesting, transaction-cost modelling and unseen-data evaluation
+  are not implemented in this version.
+- Settlement prices are not guaranteed executable trade prices.
+- Volume is not market depth or guaranteed liquidity.
 """)
 
-st.divider()
-
-st.subheader("Limitations")
-
-st.markdown("""
-- Performance results have not yet been verified.
-- Settlement prices may differ from executable trade prices.
-- Contract specifications and quotation units must be verified.
-- This prototype is for educational and hackathon demonstration
-  purposes, not financial advice.
-""")
-
-st.caption("Commodity Derivatives Intelligence | Hackpeak Project")
+st.caption("Commodity Derivatives Intelligence | Hackpeak")

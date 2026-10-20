@@ -98,6 +98,11 @@ if "Instrument Name" in df.columns:
     df = df[df["Instrument Name"].astype(str).str.strip().str.upper() == "FUTCOM"]
 
 gold = df[df["Symbol"].isin(CONTRACTS)].copy()
+# Count exact duplicates before removing them
+exact_duplicates_removed = int(gold.duplicated().sum())
+
+# Remove only fully identical rows for analysis
+gold = gold.drop_duplicates().copy()
 
 if gold.empty:
     st.warning(

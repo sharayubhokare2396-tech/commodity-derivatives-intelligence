@@ -70,6 +70,11 @@ raw.columns = raw.columns.astype(str).str.strip()
 st.subheader("1. File Validation")
 st.metric("Uploaded rows", f"{len(raw):,}")
 
+st.caption(
+    "Dataset: September 2026 MCX gold futures bhavcopy. "
+    "Contracts: GOLDM, GOLDTEN, GOLDGUINEA and GOLDPETAL."
+)
+
 missing = [c for c in REQUIRED_COLUMNS if c not in raw.columns]
 
 if missing:

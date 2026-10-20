@@ -129,6 +129,11 @@ duplicate_count = gold.duplicated(
     subset=duplicate_keys
 ).sum()
 
+st.write(
+    "Exact duplicate rows:",
+    int(gold.duplicated(keep=False).sum())
+)
+
 if duplicate_count > 0:
     st.warning(
         f"Found {duplicate_count} duplicate date-contract-expiry rows. "

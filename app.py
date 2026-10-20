@@ -134,26 +134,30 @@ duplicate_count = gold.duplicated(
     subset=duplicate_keys
 ).sum()
 
-exact_duplicate_count = gold.duplicated(keep="first").sum()
-
 st.write(
     "Exact duplicate rows:",
     int(gold.duplicated(keep=False).sum())
 )
+st.subheader("Duplicate Row Investigation")
 
-if duplicate_count > 0:
+dup_rows = gold[
+    gold.duplicated(subset=duplicate_keys, keep=False)
+].sort_values(duplicate_keys)
+
+if not dup_rows.empty:
     st.warning(
         f"Found {duplicate_count} duplicate date-contract-expiry rows. "
-        "Review duplicates before using this data for backtesting."
+        "Review these rows before backtesting."
     )
-
-    dup_rows = gold[
-        gold.duplicated(subset=duplicate_keys, keep=False)
-    ].sort_values(duplicate_keys)
-
-    st.subheader("Duplicate Row Investigation")
-    st.dataframe(dup_rows, use_container_width=True)
-   
+    st.dataframe(
+        dup_rows,
+        use_container_width=True,
+        hide_index=True
+    )
+else:
+    st.success(
+        "No duplicate date-contract-expiry rows found."
+    )
 # Calculate equivalent price per gram at 999 purity.
 # Close is quoted per the contract's quoted_grams basis.
 gold["Quoted grams"] = gold["Symbol"].map(
@@ -294,7 +298,7 @@ q2.metric("Invalid/zero gold prices removed",
           ) <= 0).sum()))
 q3.metric("Duplicate gold rows", int(duplicate_count))
 q4 = st.columns(1)[0]
-q4.metric("Exact duplicate rows", int(exact_duplicate_count))
+q4.metric("Exact duplicate rows removed", exact_duplicates_removed)
 
 st.subheader("5. Download Processed Gold Data")
 csv_data = gold[display_cols].to_csv(index=False).encode("utf-8")

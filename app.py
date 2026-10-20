@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from pathlib import Path
 
 st.set_page_config(
     page_title="Commodity Derivatives Intelligence",
@@ -16,9 +17,9 @@ st.caption(
 )
 
 st.info(
-    "Upload an MCX Bhavcopy CSV or Excel file. "
-    "This prototype calculates normalized gold prices; "
-    "historical strategy performance is not yet validated."
+    "Data source: MCX Daily Bhavcopy. "
+    "The saved dataset loads automatically; you can also upload "
+    "another Bhavcopy file for analysis."
 )
 
 CONTRACTS = {
@@ -28,35 +29,39 @@ CONTRACTS = {
     "GOLDPETAL": {"quoted_grams": 1, "purity": 999},
 }
 
-REQUIRED_COLUMNS = [
-    "Date", "Symbol", "Expiry Date", "Close"
-]
+REQUIRED_COLUMNS = ["Date", "Symbol", "Expiry Date", "Close"]
 
 st.sidebar.header("Data")
 uploaded_file = st.sidebar.file_uploader(
-    "Upload MCX Bhavcopy",
+    "Optional: Upload another MCX Bhavcopy",
     type=["csv", "xlsx", "xls"]
 )
 
-if uploaded_file is None:
-    st.subheader("Project Overview")
-    st.write(
-        "Compare MCX gold futures contracts using a common "
-        "₹/gram basis adjusted to 999 purity."
-    )
-    st.write("Supported contracts: GOLDM, GOLDTEN, "
-             "GOLDGUINEA and GOLDPETAL.")
-    st.warning("Upload a Bhavcopy file to begin analysis.")
-    st.stop()
-
 try:
-    if uploaded_file.name.lower().endswith(".csv"):
-        raw = pd.read_csv(uploaded_file,skiprows=4)
+    if uploaded_file is not None:
+        if uploaded_file.name.lower().endswith(".csv"):
+            raw = pd.read_csv(uploaded_file, skiprows=4)
+        else:
+            raw = pd.read_excel(uploaded_file)
+
+        st.sidebar.success("Using uploaded dataset")
+
     else:
-        raw = pd.read_excel(uploaded_file)
+        data_path = Path(__file__).parent / "gold_contracts_small.csv"
+
+        if not data_path.exists():
+            st.error(
+                "Saved dataset not found. Check that "
+                "gold_contracts_small.csv is committed beside app.py."
+            )
+            st.stop()
+
+        # This processed CSV already has its header on the first row.
+        raw = pd.read_csv(data_path)
+        st.sidebar.success("Using saved MCX gold dataset")
 
 except Exception as exc:
-    st.error(f"Could not read file: {exc}")
+    st.error(f"Could not read dataset: {exc}")
     st.stop()
 
 # Clean column names and padded symbol values
@@ -112,7 +117,8 @@ if "Open Interest(Lots)" in gold.columns:
     )
 if "Instrument Name" in raw.columns:
     st.write("Instrument types:", raw["Instrument Name"].value_counts())
-    duplicate_keys = ["Date", "Symbol", "Expiry Date"]
+
+duplicate_keys = ["Date", "Symbol", "Expiry Date"]
 
 duplicate_count = gold.duplicated(
     subset=duplicate_keys
@@ -174,11 +180,6 @@ daily_prices["Rolling Std"] = (
         [daily_prices["Symbol"], daily_prices["Expiry Date"]]
     )
     .transform(lambda s: s.rolling(window=5, min_periods=5).std(ddof=0))
-)
-
-daily_prices["Z-score"] = (
-    (daily_prices["Normalized ₹/g (999)"] - daily_prices["Rolling Mean"])
-    / daily_prices["Rolling Std"].replace(0, float("nan"))
 )
 
 daily_prices["Z-score"] = (

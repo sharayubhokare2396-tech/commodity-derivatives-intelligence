@@ -129,6 +129,8 @@ duplicate_count = gold.duplicated(
     subset=duplicate_keys
 ).sum()
 
+exact_duplicate_count = gold.duplicated(keep="first").sum()
+
 st.write(
     "Exact duplicate rows:",
     int(gold.duplicated(keep=False).sum())
@@ -286,6 +288,8 @@ q2.metric("Invalid/zero gold prices removed",
               errors="coerce"
           ) <= 0).sum()))
 q3.metric("Duplicate gold rows", int(duplicate_count))
+q4 = st.columns(1)[0]
+q4.metric("Exact duplicate rows", int(exact_duplicate_count))
 
 st.subheader("5. Download Processed Gold Data")
 csv_data = gold[display_cols].to_csv(index=False).encode("utf-8")
